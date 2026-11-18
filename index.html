@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Radar de lluvia</title>
 <meta name="theme-color" content="#0f172a">
+<!-- Política de seguridad: solo se ejecuta código de este sitio y solo se conecta a los servicios del radar, el mapa y la previsión. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://tile.openstreetmap.org https://tilecache.rainviewer.com; connect-src 'self' https://api.rainviewer.com https://api.open-meteo.com https://tilecache.rainviewer.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="vendor/leaflet.css">

@@ -25,3 +25,9 @@ También funciona abriendo `index.html` en local, pero para instalarla como app 
 - El plan gratuito de RainViewer da radar hasta zoom 7 (≈1 km/píxel); al acercar más se ve ampliado.
 - No hay previsión (nowcast) en el plan gratuito: solo radar pasado reciente.
 - Los tonos beis semitransparentes son llovizna o ecos muy débiles; los avisos solo cuentan lluvia (azul o más).
+
+## Seguridad
+- Sitio 100 % estático: sin servidor, sin base de datos, sin cuentas ni formularios. Leaflet va incluido en el repo (no se carga de CDNs externos).
+- Política de seguridad de contenido (CSP): solo se ejecuta JavaScript del propio sitio y solo se conecta a RainViewer, OpenStreetMap y Open-Meteo.
+- Los datos de las APIs y del almacenamiento local se validan y se escapan antes de mostrarse, para que una respuesta manipulada no pueda inyectar código.
+- El service worker solo guarda en caché los archivos propios de la app.

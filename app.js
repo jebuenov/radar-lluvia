@@ -19,8 +19,13 @@
   // ---------- Mapa ----------
   // Mapa base OpenStreetMap; el modo oscuro se consigue invirtiendo colores con CSS.
   const BASE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  // Seguridad: todo lo que viene de fuera (APIs, almacenamiento local) se valida antes de usarlo.
+  const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+  const validLatLng = p => p && Number.isFinite(p.lat) && Number.isFinite(p.lng) && Math.abs(p.lat) <= 85 && Math.abs(p.lng) <= 180;
   let home = store.get('home', MADRID);
-  let theme = store.get('theme', 'light');
+  if (!validLatLng(home)) home = MADRID;
+  let theme = store.get('theme', 'light') === 'dark' ? 'dark' : 'light';
 
   const map = L.map('map', { zoomControl: false, minZoom: 3, maxZoom: 11, worldCopyJump: true })
     .setView([home.lat, home.lng], 7);
@@ -33,10 +38,11 @@
 
   const meIcon = L.divIcon({ className: '', html: '<div class="me"></div>', iconSize: [30, 30], iconAnchor: [15, 15] });
   const meMarker = L.marker([home.lat, home.lng], { icon: meIcon, interactive: false, zIndexOffset: 1000 }).addTo(map);
-  let radiusKm = Number(store.get('radius', 25));
+  let radiusKm = [10, 25, 50].includes(Number(store.get('radius', 25))) ? Number(store.get('radius', 25)) : 25;
   const ring = L.circle([home.lat, home.lng], { radius: radiusKm * 1000, color: '#38bdf8', weight: 1.5, dashArray: '5 5', fill: false, interactive: false }).addTo(map);
 
   function setHome(lat, lng, recenter) {
+    if (!validLatLng({ lat, lng })) return;
     home = { lat, lng };
     store.set('home', home);
     meMarker.setLatLng(home);
@@ -60,18 +66,24 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const d = (await r.json()).hourly;
       if (seq !== fcSeq) return;
-      const hours = d.time.map((t, i) => ({ t, temp: d.temperature_2m[i], mm: d.precipitation[i], prob: d.precipitation_probability[i] ?? 0, code: d.weather_code[i] })).slice(1, 7);
+      if (!d || !Array.isArray(d.time)) throw new Error('respuesta inesperada');
+      const arr = k => (Array.isArray(d[k]) ? d[k] : []);
+      const hours = d.time.slice(1, 7).map((t, j) => {
+        const i = j + 1, m = /T(\d{2}:\d{2})/.exec(String(t));
+        return { t: m ? m[1] : '--:--', temp: num(arr('temperature_2m')[i]), mm: Math.max(0, num(arr('precipitation')[i])),
+          prob: Math.min(100, Math.max(0, Math.round(num(arr('precipitation_probability')[i])))), code: num(arr('weather_code')[i]) };
+      });
       el('fc-hours').innerHTML = hours.map(h => {
         const [ic, txt] = WMO(h.code), wet = h.mm >= 0.1 || h.prob >= 50;
-        return `<div class="fc-h" title="${txt} · ${h.mm.toFixed(1)} mm · ${h.prob}%">
-          <div class="t">${h.t.slice(11, 16)}</div><div class="ic">${ic}</div><div class="tp">${Math.round(h.temp)}°</div>
+        return `<div class="fc-h" title="${esc(txt)} · ${h.mm.toFixed(1)} mm · ${h.prob}%">
+          <div class="t">${esc(h.t)}</div><div class="ic">${ic}</div><div class="tp">${Math.round(h.temp)}°</div>
           <div class="pr ${wet ? 'wet' : ''}">${h.prob}%${h.mm >= 0.1 ? ' · ' + h.mm.toFixed(1) : ''}</div>
           <div class="bar"><i style="width:${h.prob}%"></i></div></div>`;
       }).join('');
       const firstWet = hours.find(h => h.mm >= 0.1 || h.prob >= 50);
       const total = hours.reduce((a, h) => a + h.mm, 0);
       el('fc-summary').textContent = firstWet
-        ? `Lluvia probable desde las ${firstWet.t.slice(11, 16)} · ${total.toFixed(1)} mm en 6 h`
+        ? `Lluvia probable desde las ${firstWet.t} · ${total.toFixed(1)} mm en 6 h`
         : 'Sin lluvia prevista en las próximas 6 horas';
       window.__forecast = hours;
     } catch (e) {
@@ -134,7 +146,10 @@
       const r = await fetch(API, { cache: 'no-store' });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const data = await r.json();
-      const newFrames = [...(data.radar.past || []), ...(data.radar.nowcast || [])];
+      // Solo se aceptan teselas del servidor oficial de RainViewer y rutas con el formato esperado.
+      if (data.host !== 'https://tilecache.rainviewer.com') throw new Error('servidor de radar inesperado');
+      const okFrame = f => f && /^\/v2\/radar\/[A-Za-z0-9_-]+$/.test(f.path) && Number.isFinite(f.time);
+      const newFrames = [...(data.radar?.past || []), ...(data.radar?.nowcast || [])].filter(okFrame);
       if (!newFrames.length) throw new Error('sin datos');
       const changed = !frames.length || newFrames[newFrames.length - 1].path !== frames[frames.length - 1].path;
       host = data.host;
@@ -149,7 +164,7 @@
       lastLoad = Date.now();
       await checkRain();
     } catch (e) {
-      setStatus('bad', 'No se pudo cargar el radar (' + e.message + '). Reintento en unos minutos.');
+      setStatus('bad', 'No se pudo cargar el radar (' + esc(e.message) + '). Reintento en unos minutos.');
     }
   }
   let lastLoad = 0;
@@ -207,7 +222,7 @@
     return km <= SCAN_KM ? km : null;
   }
 
-  let alertsOn = store.get('alerts', false);
+  let alertsOn = store.get('alerts', false) === true;
   let wasInside = null, lastNotified = 0;
 
   function setStatus(kind, html) {
