@@ -31,7 +31,7 @@
   }).addTo(map);
   document.body.classList.toggle('dark', theme === 'dark');
 
-  const meIcon = L.divIcon({ className: '', html: '<div class="me"></div>', iconSize: [16, 16], iconAnchor: [8, 8] });
+  const meIcon = L.divIcon({ className: '', html: '<div class="me"></div>', iconSize: [30, 30], iconAnchor: [15, 15] });
   const meMarker = L.marker([home.lat, home.lng], { icon: meIcon, interactive: false, zIndexOffset: 1000 }).addTo(map);
   let radiusKm = Number(store.get('radius', 25));
   const ring = L.circle([home.lat, home.lng], { radius: radiusKm * 1000, color: '#38bdf8', weight: 1.5, dashArray: '5 5', fill: false, interactive: false }).addTo(map);
@@ -43,6 +43,40 @@
     ring.setLatLng(home);
     if (recenter) map.setView(home, Math.max(map.getZoom(), 7));
     checkRain();
+    loadForecast();
+  }
+
+  // ---------- Previsión 6 h (Open-Meteo, gratis y sin clave) ----------
+  const WMO = c => c === 0 ? ['☀️', 'Despejado'] : c <= 2 ? ['🌤️', 'Poco nuboso'] : c === 3 ? ['☁️', 'Nublado']
+    : c <= 48 ? ['🌫️', 'Niebla'] : c <= 57 ? ['🌦️', 'Llovizna'] : c <= 67 ? ['🌧️', 'Lluvia'] : c <= 77 ? ['🌨️', 'Nieve']
+    : c <= 82 ? ['🌦️', 'Chubascos'] : c <= 86 ? ['🌨️', 'Chubascos de nieve'] : ['⛈️', 'Tormenta'];
+  let fcSeq = 0;
+  async function loadForecast() {
+    const seq = ++fcSeq;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${home.lat.toFixed(3)}&longitude=${home.lng.toFixed(3)}`
+      + '&hourly=temperature_2m,precipitation,precipitation_probability,weather_code&forecast_hours=7&timezone=auto';
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = (await r.json()).hourly;
+      if (seq !== fcSeq) return;
+      const hours = d.time.map((t, i) => ({ t, temp: d.temperature_2m[i], mm: d.precipitation[i], prob: d.precipitation_probability[i] ?? 0, code: d.weather_code[i] })).slice(1, 7);
+      el('fc-hours').innerHTML = hours.map(h => {
+        const [ic, txt] = WMO(h.code), wet = h.mm >= 0.1 || h.prob >= 50;
+        return `<div class="fc-h" title="${txt} · ${h.mm.toFixed(1)} mm · ${h.prob}%">
+          <div class="t">${h.t.slice(11, 16)}</div><div class="ic">${ic}</div><div class="tp">${Math.round(h.temp)}°</div>
+          <div class="pr ${wet ? 'wet' : ''}">${h.prob}%${h.mm >= 0.1 ? ' · ' + h.mm.toFixed(1) : ''}</div>
+          <div class="bar"><i style="width:${h.prob}%"></i></div></div>`;
+      }).join('');
+      const firstWet = hours.find(h => h.mm >= 0.1 || h.prob >= 50);
+      const total = hours.reduce((a, h) => a + h.mm, 0);
+      el('fc-summary').textContent = firstWet
+        ? `Lluvia probable desde las ${firstWet.t.slice(11, 16)} · ${total.toFixed(1)} mm en 6 h`
+        : 'Sin lluvia prevista en las próximas 6 horas';
+      window.__forecast = hours;
+    } catch (e) {
+      el('fc-summary').textContent = 'No se pudo cargar la previsión (' + e.message + ').';
+    }
   }
 
   function locate(recenter) {
@@ -243,7 +277,9 @@
 
   // ---------- Arranque ----------
   loadFrames();
+  loadForecast();
   locate(true);
+  setInterval(loadForecast, 30 * 60 * 1000);
   setInterval(loadFrames, REFRESH_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - lastLoad > 60000) loadFrames(); });
   setInterval(() => show(idx), 60000); // actualiza el "hace X min"

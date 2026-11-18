@@ -28,7 +28,7 @@
   #slider { flex:1; accent-color:var(--accent); }
   #time { min-width:118px; text-align:right; font-variant-numeric:tabular-nums; font-size:13px; }
   #time small { display:block; color:var(--muted); }
-  #tools { position:absolute; z-index:1000; right:12px; top:84px; display:flex; flex-direction:column; gap:6px; padding:8px; }
+  #tools { position:absolute; z-index:1000; right:12px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:6px; padding:8px; }
   #tools select { background:#1e293b; color:var(--fg); border:1px solid #334155; border-radius:8px; padding:5px; font:inherit; }
   #tools label { font-size:12px; color:var(--muted); }
   #legend { position:absolute; z-index:1000; left:12px; bottom:92px; padding:6px 10px; font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px; }
@@ -36,8 +36,21 @@
   body.dark .basemap { filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); }
   .leaflet-container { background:#e5e3df; } body.dark .leaflet-container { background:#1a1c20; }
   .leaflet-control-attribution { font-size:10px; }
-  .me { width:16px; height:16px; border-radius:50%; background:var(--accent); border:3px solid #fff; box-shadow:0 0 0 2px rgba(56,189,248,.4); }
-  @media (max-width:600px) { #top { right:12px; } #tools { top:auto; bottom:150px; } #legend { display:none; } }
+  .me { position:relative; width:30px; height:30px; border-radius:50%; background:#0ea5e9; border:4px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,.45); }
+  .me::after { content:''; position:absolute; inset:-14px; border-radius:50%; border:3px solid #0ea5e9; animation:pulse 2s ease-out infinite; }
+  @keyframes pulse { from { transform:scale(.5); opacity:1; } to { transform:scale(1.4); opacity:0; } }
+  #locate { position:absolute; z-index:1000; left:50%; transform:translateX(-50%); bottom:96px; padding:12px 22px; font-size:17px; font-weight:600; border-radius:999px; background:#0ea5e9; color:#fff; border:2px solid #fff; box-shadow:0 4px 16px rgba(0,0,0,.4); }
+  #locate:hover { background:#0284c7; }
+  #forecast { top:12px; right:12px; width:400px; padding:10px 12px; }
+  #forecast h2 { margin:0 0 2px; font-size:14px; font-weight:600; }
+  #fc-summary { font-size:12px; color:var(--muted); margin-bottom:8px; }
+  #fc-hours { display:grid; grid-template-columns:repeat(6,1fr); gap:4px; text-align:center; }
+  .fc-h { background:rgba(30,41,59,.7); border-radius:8px; padding:6px 2px; font-size:12px; }
+  .fc-h .t { color:var(--muted); } .fc-h .ic { font-size:22px; line-height:1.3; } .fc-h .tp { font-weight:600; font-size:13px; }
+  .fc-h .pr { font-size:11px; color:var(--muted); } .fc-h .pr.wet { color:var(--accent); font-weight:600; }
+  .fc-h .bar { height:4px; margin:4px 6px 0; border-radius:2px; background:#334155; overflow:hidden; } .fc-h .bar i { display:block; height:100%; background:var(--accent); }
+  @media (max-width:1050px) { #top { right:424px; } }
+  @media (max-width:760px) { #top { right:12px; } #forecast { top:70px; left:12px; right:12px; width:auto; } #tools { top:auto; transform:none; bottom:150px; } #legend { display:none; } #locate { bottom:90px; } }
 </style>
 </head>
 <body>
@@ -48,8 +61,15 @@
   <div id="status"><span class="dot"></span>Cargando radar…</div>
 </div>
 
+<div id="forecast" class="panel">
+  <h2>Próximas 6 horas</h2>
+  <div id="fc-summary">Cargando previsión…</div>
+  <div id="fc-hours"></div>
+</div>
+
+<button id="locate" title="Centrar el mapa en mi ubicación">📍 Mi ubicación</button>
+
 <div id="tools" class="panel">
-  <button id="locate" title="Centrar en mi ubicación">📍 Mi ubicación</button>
   <button id="alerts" title="Notificar cuando la lluvia se acerque">🔔 Avisos: no</button>
   <label for="radius">Radio de aviso</label>
   <select id="radius">
