@@ -97,7 +97,7 @@
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       p => setHome(p.coords.latitude, p.coords.longitude, recenter),
-      () => { if (recenter) setStatus('warn', 'No se pudo obtener tu ubicación. Usando la última conocida.'); },
+      () => { if (recenter) setStatus('warn', 'Ubicación no disponible', 'Usando la última conocida.'); },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 }
     );
   }
@@ -166,7 +166,7 @@
       lastLoad = Date.now();
       await checkRain();
     } catch (e) {
-      setStatus('bad', 'No se pudo cargar el radar (' + esc(e.message) + '). Reintento en unos minutos.');
+      setStatus('bad', 'Radar no disponible', 'Error: ' + esc(e.message) + '. Reintento en unos minutos.');
     }
   }
   let lastLoad = 0;
@@ -227,8 +227,12 @@
   let alertsOn = store.get('alerts', false) === true;
   let wasInside = null, lastNotified = 0;
 
-  function setStatus(kind, html) {
-    statusEl.innerHTML = `<span class="dot ${kind}"></span>${html}`;
+  // kind: ok | warn | bad | ''. main y sub admiten HTML generado por la propia app (nunca datos externos sin escapar).
+  function setStatus(kind, main, sub = '') {
+    statusEl.className = kind;
+    el('rain-ic').textContent = { ok: '☀️', warn: '🌦️', bad: '🌧️' }[kind] || 'ℹ️';
+    el('rain-main').innerHTML = main;
+    el('rain-sub').innerHTML = sub || '&nbsp;';
   }
 
   async function checkRain() {
@@ -237,17 +241,18 @@
     const earlier = frames[Math.max(0, frames.length - 4)]; // ~30 min antes
     const [now, before] = await Promise.all([nearestRain(latest, home.lat, home.lng), nearestRain(earlier, home.lat, home.lng)]);
     window.__radarState = { now, before, frames: frames.length, latest: latest.time };
-    if (now === undefined) { setStatus('', 'Radar cargado (no se pudo analizar la lluvia cercana).'); return; }
+    if (now === undefined) { setStatus('', 'Radar cargado', 'No se pudo analizar la lluvia cercana.'); return; }
     const hora = new Date(latest.time * 1000).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     let trend = '';
     if (now !== null && before !== null && before !== undefined) {
       if (now < before - 3) trend = ' · <b>se acerca</b>';
       else if (now > before + 3) trend = ' · se aleja';
     } else if (now !== null && before === null) trend = ' · <b>nueva</b>';
+    const trendTxt = trend.includes('acerca') ? '<b>⬈ Se acerca</b> · ' : trend.includes('aleja') ? '⬊ Se aleja · ' : trend.includes('nueva') ? '<b>Nueva</b> · ' : '';
     const inside = now !== null && now <= radiusKm;
-    if (now === null) setStatus('ok', `Sin lluvia en ${SCAN_KM} km a la redonda <small>(${hora})</small>`);
-    else if (now < 2) setStatus('bad', `<b>Está lloviendo en tu zona</b>${trend} <small>(${hora})</small>`);
-    else setStatus(inside ? 'bad' : 'warn', `Lluvia a <b>${Math.round(now)} km</b>${trend} <small>(${hora})</small>`);
+    if (now === null) setStatus('ok', 'Sin lluvia cerca', `Nada en ${SCAN_KM} km a la redonda · radar de las ${hora}`);
+    else if (now < 2) setStatus('bad', '<b>Está lloviendo aquí</b>', `${trendTxt}Radar de las ${hora}`);
+    else setStatus(inside ? 'bad' : 'warn', `Lluvia a <b>${Math.round(now)} km</b>`, `${trendTxt}Radar de las ${hora}`);
 
     if (alertsOn && inside && wasInside === false && Date.now() - lastNotified > 30 * 60 * 1000) {
       notify(now < 2 ? 'Está lloviendo en tu zona' : `Lluvia a ${Math.round(now)} km de ti`,
@@ -279,9 +284,9 @@
   function paintAlerts() { alertsBtn.textContent = alertsOn ? '🔔 Avisos: sí' : '🔕 Avisos: no'; alertsBtn.classList.toggle('on', alertsOn); }
   alertsBtn.onclick = async () => {
     if (!alertsOn) {
-      if (!('Notification' in window)) { setStatus('warn', 'Este navegador no permite notificaciones.'); return; }
+      if (!('Notification' in window)) { setStatus('warn', 'Avisos no disponibles', 'Este navegador no permite notificaciones.'); return; }
       const p = await Notification.requestPermission();
-      if (p !== 'granted') { setStatus('warn', 'Has bloqueado las notificaciones para esta página.'); return; }
+      if (p !== 'granted') { setStatus('warn', 'Avisos bloqueados', 'Permite las notificaciones para esta página en el navegador.'); return; }
       alertsOn = true;
       notify('Avisos de lluvia activados', `Te avisaré cuando haya lluvia a menos de ${radiusKm} km.`);
     } else alertsOn = false;
@@ -303,7 +308,9 @@
     const hm = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', ...z });
     const ss = now.toLocaleTimeString('es-ES', { second: '2-digit', ...z }).padStart(2, '0');
     el('clock-time').innerHTML = `${esc(hm)}<small>:${esc(ss)}</small>`;
-    const place = clockZone ? ' · ' + clockZone.split('/').pop().replace(/_/g, ' ') : '';
+    // El nombre de la zona solo se muestra si es distinta de la del ordenador (p. ej. viajando).
+    const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const place = clockZone && clockZone !== localZone ? ' · Hora de ' + clockZone.split('/').pop().replace(/_/g, ' ') : '';
     const date = now.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', ...z });
     el('clock-date').textContent = date.charAt(0).toUpperCase() + date.slice(1) + place;
   }
