@@ -19,6 +19,10 @@
   .panel { position:absolute; z-index:1000; background:var(--panel); border-radius:12px; box-shadow:0 4px 18px rgba(0,0,0,.35); backdrop-filter:blur(6px); }
   #top { top:12px; left:12px; right:12px; max-width:560px; padding:10px 14px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
   #top h1 { font-size:15px; margin:0; font-weight:600; }
+  #clock { padding-right:14px; border-right:1px solid #334155; line-height:1.15; }
+  #clock-time { font-size:30px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:.5px; }
+  #clock-time small { font-size:16px; color:var(--muted); font-weight:500; }
+  #clock-date { font-size:12px; color:var(--muted); }
   #status { flex:1; min-width:180px; font-size:13px; }
   #status b { font-weight:600; }
   .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; background:var(--muted); vertical-align:middle; }
@@ -53,13 +57,14 @@
   .fc-h .pr { font-size:11px; color:var(--muted); } .fc-h .pr.wet { color:var(--accent); font-weight:600; }
   .fc-h .bar { height:4px; margin:4px 6px 0; border-radius:2px; background:#334155; overflow:hidden; } .fc-h .bar i { display:block; height:100%; background:var(--accent); }
   @media (max-width:1050px) { #top { right:424px; } }
-  @media (max-width:760px) { #top { right:12px; } #forecast { top:70px; left:12px; right:12px; width:auto; } #tools { top:auto; transform:none; bottom:150px; } #legend { display:none; } #locate { bottom:90px; } }
+  @media (max-width:760px) { #top { right:12px; } #clock-time { font-size:24px; } #forecast { top:96px; left:12px; right:12px; width:auto; } #tools { top:auto; transform:none; bottom:150px; } #legend { display:none; } #locate { bottom:90px; } }
 </style>
 </head>
 <body>
 <div id="map"></div>
 
 <div id="top" class="panel">
+  <div id="clock" title="Hora en tu ubicación"><div id="clock-time">--:--</div><div id="clock-date">&nbsp;</div></div>
   <h1>☔ Radar de lluvia</h1>
   <div id="status"><span class="dot"></span>Cargando radar…</div>
 </div>

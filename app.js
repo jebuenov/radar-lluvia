@@ -64,8 +64,10 @@
     try {
       const r = await fetch(url, { cache: 'no-store' });
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      const d = (await r.json()).hourly;
+      const json = await r.json();
+      const d = json.hourly;
       if (seq !== fcSeq) return;
+      setClockZone(json.timezone);
       if (!d || !Array.isArray(d.time)) throw new Error('respuesta inesperada');
       const arr = k => (Array.isArray(d[k]) ? d[k] : []);
       const hours = d.time.slice(1, 7).map((t, j) => {
@@ -289,6 +291,29 @@
   paintAlerts();
 
   el('theme').onclick = () => { theme = theme === 'light' ? 'dark' : 'light'; store.set('theme', theme); document.body.classList.toggle('dark', theme === 'dark'); };
+
+  // ---------- Reloj (zona horaria de la ubicación, la da Open-Meteo) ----------
+  let clockZone;  // undefined = zona del ordenador
+  function setClockZone(tz) {
+    if (typeof tz !== 'string' || !/^[A-Za-z_]+(\/[A-Za-z0-9_+-]+)*$/.test(tz)) return;
+    try { new Intl.DateTimeFormat('es-ES', { timeZone: tz }); clockZone = tz; tickClock(); } catch { /* zona no válida */ }
+  }
+  function tickClock() {
+    const now = new Date(), z = clockZone ? { timeZone: clockZone } : {};
+    const hm = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', ...z });
+    const ss = now.toLocaleTimeString('es-ES', { second: '2-digit', ...z }).padStart(2, '0');
+    el('clock-time').innerHTML = `${esc(hm)}<small>:${esc(ss)}</small>`;
+    const place = clockZone ? ' · ' + clockZone.split('/').pop().replace(/_/g, ' ') : '';
+    const date = now.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', ...z });
+    el('clock-date').textContent = date.charAt(0).toUpperCase() + date.slice(1) + place;
+  }
+  // En pantallas estrechas la previsión va justo debajo del panel superior, sin taparlo.
+  const topEl = el('top'), fcEl = el('forecast');
+  const placeForecast = () => { fcEl.style.top = innerWidth <= 760 ? (topEl.offsetTop + topEl.offsetHeight + 8) + 'px' : ''; };
+  new ResizeObserver(placeForecast).observe(topEl);
+  addEventListener('resize', placeForecast);
+  tickClock();
+  setInterval(tickClock, 1000);
 
   // ---------- Arranque ----------
   loadFrames();

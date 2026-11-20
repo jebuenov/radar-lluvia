@@ -12,6 +12,7 @@ Inspirado en rain-alarm.com. Datos de radar: [RainViewer](https://www.rainviewer
 - Arriba indica a qué distancia está la lluvia más cercana (hasta 150 km) y si se acerca o se aleja respecto a hace 30 min.
 - 🔔 Avisos: notificación del sistema cuando entra lluvia en tu radio (10/25/50 km). Funciona mientras la app esté abierta (puede estar minimizada).
 - 🌤️ Arriba a la derecha, previsión de las próximas 6 horas (Open-Meteo): cielo, temperatura, probabilidad y mm de lluvia.
+- 🕘 Reloj arriba a la izquierda con la hora y la fecha de la zona horaria de tu ubicación.
 - 🌓 Mapa claro/oscuro.
 
 ## Instalarla como app en el PC (ventana propia)
