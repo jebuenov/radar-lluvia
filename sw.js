@@ -1,5 +1,5 @@
 // Service worker: guarda la app para abrirla rápido; el radar y el mapa siempre van a la red.
-const CACHE = 'radar-lluvia-v5';
+const CACHE = 'radar-lluvia-v6';
 const SHELL = ['./', './index.html', './app.js', './manifest.json', './vendor/leaflet.js', './vendor/leaflet.css', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
