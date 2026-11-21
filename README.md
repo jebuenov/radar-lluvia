@@ -8,7 +8,8 @@ Inspirado en rain-alarm.com. Datos de radar: [RainViewer](https://www.rainviewer
 ## Qué hace
 - Mapa con la capa de radar animada; botón ▶/⏸ y barra para moverte por el tiempo.
 - Se actualiza solo cada 5 minutos (y al volver a la ventana).
-- Se centra en tu ubicación (si no das permiso, usa Madrid o la última conocida). Clic derecho en el mapa = fijar tu punto a mano.
+- Se centra en tu ubicación (si no das permiso, usa Madrid o la última conocida).
+- 📍 Ubicación manual: pulsa en cualquier punto del mapa → «Poner mi ubicación aquí», o arrastra el punto azul. Se recuerda al abrir la app; «Mi ubicación» vuelve al GPS.
 - Arriba indica a qué distancia está la lluvia más cercana (hasta 150 km) y si se acerca o se aleja respecto a hace 30 min.
 - 🔔 Avisos: notificación del sistema cuando entra lluvia en tu radio (10/25/50 km). Funciona mientras la app esté abierta (puede estar minimizada).
 - 🌤️ Arriba a la derecha, previsión de las próximas 6 horas (Open-Meteo): cielo, temperatura, probabilidad y mm de lluvia.

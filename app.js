@@ -37,14 +37,17 @@
   document.body.classList.toggle('dark', theme === 'dark');
 
   const meIcon = L.divIcon({ className: '', html: '<div class="me"></div>', iconSize: [30, 30], iconAnchor: [15, 15] });
-  const meMarker = L.marker([home.lat, home.lng], { icon: meIcon, interactive: false, zIndexOffset: 1000 }).addTo(map);
+  const meMarker = L.marker([home.lat, home.lng], { icon: meIcon, draggable: true, autoPan: true, title: 'Arrástrame para mover tu ubicación', zIndexOffset: 1000 }).addTo(map);
+  let manualHome = store.get('manual', false) === true; // true = elegida a mano, el GPS no la cambia al abrir
   let radiusKm = [10, 25, 50].includes(Number(store.get('radius', 25))) ? Number(store.get('radius', 25)) : 25;
   const ring = L.circle([home.lat, home.lng], { radius: radiusKm * 1000, color: '#38bdf8', weight: 1.5, dashArray: '5 5', fill: false, interactive: false }).addTo(map);
 
-  function setHome(lat, lng, recenter) {
+  function setHome(lat, lng, recenter, manual) {
     if (!validLatLng({ lat, lng })) return;
+    lng = ((lng + 180) % 360 + 360) % 360 - 180; // el mapa da la vuelta al mundo
     home = { lat, lng };
     store.set('home', home);
+    if (manual !== undefined) { manualHome = manual; store.set('manual', manual); }
     meMarker.setLatLng(home);
     ring.setLatLng(home);
     if (recenter) map.setView(home, Math.max(map.getZoom(), 7));
@@ -104,9 +107,9 @@
   }
 
   function locate(recenter) {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) { if (recenter) toast('Este navegador no permite obtener la ubicación.'); return; }
     navigator.geolocation.getCurrentPosition(
-      p => setHome(p.coords.latitude, p.coords.longitude, recenter),
+      p => setHome(p.coords.latitude, p.coords.longitude, recenter, false),
       () => { if (recenter) setStatus('warn', 'Ubicación no disponible', 'Usando la última conocida.'); },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 }
     );
@@ -286,7 +289,29 @@
   playBtn.onclick = () => setPlaying(!playing);
   slider.oninput = () => { setPlaying(false); show(Number(slider.value)); };
   el('locate').onclick = () => { map.setView(home, Math.max(map.getZoom(), 7)); locate(true); };
-  map.on('contextmenu', e => setHome(e.latlng.lat, e.latlng.lng, false)); // clic derecho = fijar mi punto
+
+  // ---------- Ubicación manual ----------
+  // Pulsar en el mapa abre un botón "Poner mi ubicación aquí"; también se puede arrastrar el punto azul.
+  let toastTimer = null;
+  function toast(msg) {
+    const t = el('toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 4500);
+  }
+  function setManual(latlng) {
+    setHome(latlng.lat, latlng.lng, false, true);
+    toast('📍 Ubicación fijada aquí. Pulsa «Mi ubicación» para volver a usar el GPS.');
+  }
+  const pickPopup = L.popup({ closeButton: false, className: 'pick-popup', offset: [0, -4] });
+  map.on('click', e => {
+    if (zenOn) return;
+    const btn = document.createElement('button');
+    btn.className = 'pick-btn';
+    btn.textContent = '📍 Poner mi ubicación aquí';
+    btn.onclick = ev => { ev.stopPropagation(); map.closePopup(pickPopup); setManual(e.latlng); };
+    pickPopup.setLatLng(e.latlng).setContent(btn).openOn(map);
+  });
+  map.on('contextmenu', e => setManual(e.latlng)); // clic derecho = fijar directamente
+  meMarker.on('dragend', () => setManual(meMarker.getLatLng()));
 
   const radiusSel = el('radius');
   radiusSel.value = String(radiusKm);
@@ -573,7 +598,7 @@
   if (store.get('zen', false) === true) setZen(true, false); // al reabrir la app vuelve en modo zen
   loadFrames();
   loadForecast();
-  locate(true);
+  if (!manualHome) locate(true); // si la elegiste a mano, se respeta al abrir
   setInterval(loadForecast, 30 * 60 * 1000);
   setInterval(loadFrames, REFRESH_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - lastLoad > 60000) loadFrames(); });

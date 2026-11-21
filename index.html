@@ -53,6 +53,13 @@
   @keyframes pulse { from { transform:scale(.5); opacity:1; } to { transform:scale(1.4); opacity:0; } }
   #locate { position:absolute; z-index:1000; left:50%; transform:translateX(-50%); bottom:96px; padding:12px 22px; font-size:17px; font-weight:600; border-radius:999px; background:#0ea5e9; color:#fff; border:2px solid #fff; box-shadow:0 4px 16px rgba(0,0,0,.4); }
   #locate:hover { background:#0284c7; }
+  .leaflet-marker-draggable { cursor:grab; }
+  .pick-popup .leaflet-popup-content-wrapper, .pick-popup .leaflet-popup-tip { background:var(--panel); color:var(--fg); box-shadow:0 4px 16px rgba(0,0,0,.4); }
+  .pick-popup .leaflet-popup-content { margin:8px; }
+  .pick-btn { background:#0ea5e9; color:#fff; border:none; font-weight:600; font-size:14px; padding:8px 12px; white-space:nowrap; }
+  .pick-btn:hover { background:#0284c7; }
+  #toast { position:absolute; z-index:1600; left:50%; transform:translateX(-50%); top:42%; max-width:calc(100% - 32px); background:var(--panel);
+    color:var(--fg); padding:10px 16px; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,.4); font-size:14px; text-align:center; }
   #forecast { top:12px; right:12px; width:400px; padding:10px 12px; }
   #forecast h2 { margin:0 0 2px; font-size:14px; font-weight:600; }
   #fc-summary { font-size:12px; color:var(--muted); margin-bottom:8px; }
@@ -166,6 +173,8 @@
     <button id="zen-exit">✕ Salir del modo zen <kbd>Esc</kbd></button>
   </div>
 </div>
+
+<div id="toast" hidden role="status"></div>
 
 <button id="show-ui" hidden title="Mostrar todo (tecla H)">👁 Mostrar todo <kbd>H</kbd></button>
 
