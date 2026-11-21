@@ -482,8 +482,81 @@
   document.addEventListener('keydown', e => {
     if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'h' || e.key === 'H') setMinimal(!document.body.classList.contains('minimal'));
-    if (e.key === 'Escape') { custom.hidden = true; setMinimal(false); }
+    if (e.key === 'z' || e.key === 'Z') setZen(!zenOn, true);
+    if (e.key === 'Escape') { custom.hidden = true; setMinimal(false); if (zenOn) setZen(false, true); }
   });
+
+  // ---------- Modo zen ----------
+  // Pantalla tranquila: reloj gigante, una frase con el tiempo y el radar suave de fondo.
+  // Los controles aparecen al mover el ratón; de noche baja el brillo; la pantalla no se apaga.
+  let zenOn = false, zenTimer = null, wakeLock = null;
+  let zenSound = store.get('zenSound', false) === true;
+  async function keepAwake() {
+    try { if (zenOn && 'wakeLock' in navigator && document.visibilityState === 'visible') wakeLock = await navigator.wakeLock.request('screen'); } catch { /* no disponible */ }
+  }
+  function setZen(on, fromUser) {
+    zenOn = on;
+    store.set('zen', on);
+    document.body.classList.toggle('zen', on);
+    el('zen').hidden = !on;
+    if (on) {
+      setMinimal(false);
+      if (fromUser && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+      keepAwake(); zenTick(); wakeZenControls();
+    } else {
+      if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+      rainSound(false);
+    }
+  }
+  function wakeZenControls() {
+    document.body.classList.add('zen-awake');
+    clearTimeout(zenTimer);
+    zenTimer = setTimeout(() => document.body.classList.remove('zen-awake'), 3000);
+  }
+  ['mousemove', 'pointerdown', 'touchstart'].forEach(ev => addEventListener(ev, () => { if (zenOn) wakeZenControls(); }, { passive: true }));
+  document.addEventListener('visibilitychange', () => { if (zenOn && document.visibilityState === 'visible') keepAwake(); });
+
+  function zenTick() {
+    if (!zenOn) return;
+    const z = clockZone ? { timeZone: clockZone } : {}, now = new Date();
+    el('zen-time').textContent = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', ...z });
+    el('zen-date').textContent = el('clock-date').textContent;
+    const parts = [el('rain-main').textContent.trim()];
+    const f = window.__forecast && window.__forecast[0];
+    if (f) parts.push(`${Math.round(f.temp)}°`, WMO(f.code)[1].toLowerCase());
+    el('zen-line').textContent = parts.filter(Boolean).join(' · ');
+    const hour = Number(now.toLocaleTimeString('es-ES', { hour: '2-digit', hour12: false, ...z }).slice(0, 2));
+    document.body.classList.toggle('zen-night', hour >= 22 || hour < 7);
+    rainSound(zenSound && radarInfo && radarInfo.now != null && radarInfo.now <= radiusKm);
+  }
+  setInterval(zenTick, 1000);
+
+  // Sonido de lluvia sintetizado (ruido filtrado), sin descargar audio. Solo suena si llueve cerca de verdad.
+  let audio = null;
+  function rainSound(on) {
+    if (!on) { if (audio) audio.gain.gain.setTargetAtTime(0, audio.ctx.currentTime, 0.8); return; }
+    if (!audio) {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate), d = buf.getChannelData(0);
+      let last = 0;
+      for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; last = (last + 0.04 * w) / 1.04; d[i] = last * 3 + w * 0.08; }
+      const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+      const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 1400;
+      const gain = ctx.createGain(); gain.gain.value = 0;
+      src.connect(filter).connect(gain).connect(ctx.destination); src.start();
+      audio = { ctx, gain };
+    }
+    if (audio.ctx.state === 'suspended') audio.ctx.resume().catch(() => {});
+    audio.gain.gain.setTargetAtTime(0.35, audio.ctx.currentTime, 1.5);
+  }
+  const soundBtn = el('zen-sound');
+  const paintSound = () => { soundBtn.textContent = zenSound ? '🔈 Sonido de lluvia: sí' : '🔇 Sonido de lluvia: no'; };
+  soundBtn.onclick = () => { zenSound = !zenSound; store.set('zenSound', zenSound); paintSound(); zenTick(); };
+  paintSound();
+  el('zen-btn').onclick = () => setZen(true, true);
+  el('zen-exit').onclick = () => setZen(false, true);
+  el('zen-full').onclick = () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else document.documentElement.requestFullscreen().catch(() => {}); };
 
   // Columna derecha: previsión arriba y ropa tendida debajo (en móvil, todo bajo el panel del reloj).
   function placePanels() {
@@ -497,6 +570,7 @@
   // ---------- Arranque ----------
   applyParts();
   paintLaundry();
+  if (store.get('zen', false) === true) setZen(true, false); // al reabrir la app vuelve en modo zen
   loadFrames();
   loadForecast();
   locate(true);

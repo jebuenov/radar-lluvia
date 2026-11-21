@@ -15,6 +15,7 @@ Inspirado en rain-alarm.com. Datos de radar: [RainViewer](https://www.rainviewer
 - 🕘 Reloj arriba a la izquierda con la hora y la fecha de la zona horaria de tu ubicación.
 - 🌓 Mapa claro/oscuro.
 - 🧺 Modo ropa tendida: te dice si es buen momento para tender, cuánto tardará en secarse y la mejor hora del día. Con «Tengo ropa tendida» te avisa antes de que llegue la lluvia (30 min, 1 h o 2 h de margen, calculado con la velocidad a la que se acerca en el radar).
+- 🧘 Modo zen (botón «Zen» o tecla **Z**): pantalla completa con reloj gigante, una frase del tiempo y el radar suave de fondo. Los controles aparecen al mover el ratón, de noche baja el brillo y la pantalla no se apaga. Sonido de lluvia opcional (solo suena si llueve cerca). Salir con **Esc**.
 - ⚙️ Personalizar: muestra u oculta cada parte de la pantalla (se guarda en el navegador). Tecla **H**: ocultar todo y ver solo el mapa.
 
 ## Instalarla como app en el PC (ventana propia)
