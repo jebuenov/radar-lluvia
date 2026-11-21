@@ -60,7 +60,8 @@
   async function loadForecast() {
     const seq = ++fcSeq;
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${home.lat.toFixed(3)}&longitude=${home.lng.toFixed(3)}`
-      + '&hourly=temperature_2m,precipitation,precipitation_probability,weather_code&forecast_hours=7&timezone=auto';
+      + '&hourly=temperature_2m,precipitation,precipitation_probability,weather_code,relative_humidity_2m,wind_speed_10m,et0_fao_evapotranspiration,is_day'
+      + '&forecast_hours=25&timezone=auto';
     try {
       const r = await fetch(url, { cache: 'no-store' });
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -88,8 +89,17 @@
         ? `Lluvia probable desde las ${firstWet.t} · ${total.toFixed(1)} mm en 6 h`
         : 'Sin lluvia prevista en las próximas 6 horas';
       window.__forecast = hours;
+      laundryHours = d.time.slice(0, 25).map((t, i) => {
+        const m = /T(\d{2}:\d{2})/.exec(String(t));
+        return { t: m ? m[1] : '--:--', mm: Math.max(0, num(arr('precipitation')[i])), prob: Math.min(100, Math.max(0, num(arr('precipitation_probability')[i]))),
+          et0: Math.max(0, num(arr('et0_fao_evapotranspiration')[i])), rh: num(arr('relative_humidity_2m')[i], 80),
+          wind: num(arr('wind_speed_10m')[i]), temp: num(arr('temperature_2m')[i]), day: num(arr('is_day')[i]) === 1 };
+      });
+      updateLaundry();
     } catch (e) {
       el('fc-summary').textContent = 'No se pudo cargar la previsión (' + e.message + ').';
+      el('ld-main').textContent = 'Sin datos de previsión';
+      el('ld-sub').textContent = 'No se pudo cargar la previsión (' + e.message + '). Reintento más tarde.';
     }
   }
 
@@ -241,6 +251,8 @@
     const earlier = frames[Math.max(0, frames.length - 4)]; // ~30 min antes
     const [now, before] = await Promise.all([nearestRain(latest, home.lat, home.lng), nearestRain(earlier, home.lat, home.lng)]);
     window.__radarState = { now, before, frames: frames.length, latest: latest.time };
+    radarInfo = { now, before };
+    updateLaundry();
     if (now === undefined) { setStatus('', 'Radar cargado', 'No se pudo analizar la lluvia cercana.'); return; }
     const hora = new Date(latest.time * 1000).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     let trend = '';
@@ -316,13 +328,175 @@
   }
   // En pantallas estrechas la previsión va justo debajo del panel superior, sin taparlo.
   const topEl = el('top'), fcEl = el('forecast');
-  const placeForecast = () => { fcEl.style.top = innerWidth <= 760 ? (topEl.offsetTop + topEl.offsetHeight + 8) + 'px' : ''; };
-  new ResizeObserver(placeForecast).observe(topEl);
-  addEventListener('resize', placeForecast);
+  new ResizeObserver(() => placePanels()).observe(topEl);
+  new ResizeObserver(() => placePanels()).observe(fcEl);
+  addEventListener('resize', () => placePanels());
   tickClock();
   setInterval(tickClock, 1000);
 
+  // ---------- Modo ropa tendida ----------
+  // Secado estimado con la evapotranspiración (ET0) horaria de Open-Meteo: combina sol, viento, humedad y temperatura.
+  // Se considera seca cuando la ET0 acumulada llega a DRY_MM. Una hora "mojada" corta el secado.
+  const DRY_MM = 1.2;
+  let laundryHours = null, radarInfo = null;
+  let laundryMode = store.get('laundry', false) === true;
+  let laundryOut = store.get('laundryOut', false) === true;
+  let laundryMargin = [30, 60, 120].includes(Number(store.get('laundryMargin', 60))) ? Number(store.get('laundryMargin', 60)) : 60;
+  let lastLaundryAlert = 0;
+  const wetHour = h => h.mm >= 0.1 || h.prob >= 40;
+  const fmtH = x => {
+    if (x < 1) return `${Math.max(10, Math.round(x * 6) * 10)} min`;
+    const half = Math.round(x * 2) / 2;
+    return Number.isInteger(half) ? `${half} h` : `${Math.floor(half)} h y media`;
+  };
+
+  // Horas desde la hora `s` hasta que se seca, o {rain: índice} si llueve antes, o null si no se seca en 24 h.
+  function dryFrom(s) {
+    let acc = 0;
+    for (let i = s; i < laundryHours.length; i++) {
+      const h = laundryHours[i];
+      if (wetHour(h)) return { rain: i };
+      acc += h.et0;
+      if (acc >= DRY_MM) return { hours: i - s + (DRY_MM - (acc - h.et0)) / Math.max(h.et0, 0.01) };
+    }
+    return null;
+  }
+
+  // Llegada estimada de la lluvia por el radar (minutos), con la velocidad de acercamiento de los últimos 30 min.
+  function radarEta() {
+    if (!radarInfo || radarInfo.now == null) return null;
+    const { now, before } = radarInfo;
+    if (now < 2) return 0;
+    if (before == null || before - now < 3) return null;
+    const speed = Math.min(120, (before - now) * 2); // km/h
+    return speed >= 5 ? Math.round(now / speed * 60) : null;
+  }
+
+  function setLaundry(kind, icon, main, sub, extra) {
+    el('laundry').className = 'panel ' + kind;
+    el('ld-ic').textContent = icon;
+    el('ld-main').textContent = main;
+    el('ld-sub').textContent = sub;
+    el('ld-extra').textContent = extra || '';
+  }
+
+  function updateLaundry() {
+    if (!laundryMode) return;
+    const eta = radarEta(), near = radarInfo && radarInfo.now != null ? radarInfo.now : null;
+    let radarTxt = near == null ? 'Radar: sin lluvia en 150 km.' : near < 2 ? 'Radar: está lloviendo aquí.'
+      : `Radar: lluvia a ${Math.round(near)} km` + (eta != null ? `, llegaría en unos ${eta} min.` : (radarInfo.before != null && near > radarInfo.before + 3 ? ', se aleja.' : '.'));
+    if (!laundryHours) { setLaundry('', '🧺', 'Cargando previsión…', radarTxt); return; }
+
+    // 1) Lluvia encima o llegando pronto según el radar
+    if (eta != null && eta <= laundryMargin) {
+      setLaundry('bad', '🏃', eta === 0 ? '¡Recoge la ropa! Está lloviendo' : `¡Recoge la ropa! Lluvia en ~${eta} min`, radarTxt);
+      maybeLaundryAlert(eta === 0 ? 'Está lloviendo: recoge la ropa' : `Lluvia en unos ${eta} min: recoge la ropa`, radarTxt);
+      return;
+    }
+    const r = dryFrom(0);
+    const best = (() => { // mejor hora de inicio en las próximas 12 h con luz de día
+      let b = null;
+      for (let s = 1; s <= 12 && s < laundryHours.length; s++) {
+        if (!laundryHours[s].day) continue;
+        const x = dryFrom(s);
+        if (x && x.hours != null && x.hours <= 8 && (!b || x.hours < b.hours)) b = { s, hours: x.hours };
+      }
+      return b;
+    })();
+    const bestTxt = best ? `Mejor momento: a las ${laundryHours[best.s].t} (se seca en ~${fmtH(best.hours)}).` : 'No hay un buen momento en las próximas 12 horas.';
+    const rainHour = laundryHours.slice(0, Math.ceil(laundryMargin / 60) + 1).find(wetHour);
+
+    if (r && r.rain != null) {
+      const t = laundryHours[r.rain].t;
+      setLaundry('bad', '🏠', r.rain === 0 ? 'Mejor dentro: lluvia ahora' : `Mejor dentro: lluvia hacia las ${t}`,
+        `No le da tiempo a secarse (${laundryHours[r.rain].prob}% de probabilidad).`, bestTxt + ' ' + radarTxt);
+      if (rainHour) maybeLaundryAlert(`Lluvia prevista hacia las ${rainHour.t}: recoge la ropa`, `Probabilidad ${rainHour.prob}%.`);
+    } else if (r && r.hours <= 6) {
+      const end = laundryHours[Math.min(laundryHours.length - 1, Math.ceil(r.hours))].t;
+      setLaundry('ok', '👕', 'Buen momento para tender', `Se seca en ~${fmtH(r.hours)} (hacia las ${end}).`, radarTxt);
+    } else if (r && r.hours) {
+      setLaundry('warn', '🐢', 'Secado lento', `Sin lluvia, pero tardaría ~${fmtH(r.hours)} en secarse.`, bestTxt + ' ' + radarTxt);
+    } else {
+      setLaundry('warn', '🐢', 'Secado muy lento', 'Con este tiempo no se secaría en 24 horas.', radarTxt);
+    }
+    if (near != null && near <= 50 && eta == null && near < 50) {
+      // respaldo: lluvia cerca aunque no se pueda calcular la velocidad
+      maybeLaundryAlert(`Lluvia a ${Math.round(near)} km: vigila la ropa`, radarTxt);
+    }
+  }
+
+  function maybeLaundryAlert(title, body) {
+    if (!laundryOut || Date.now() - lastLaundryAlert < 30 * 60 * 1000) return;
+    lastLaundryAlert = Date.now();
+    notify('🧺 ' + title, body);
+  }
+
+  const laundryBtn = el('laundry-mode'), outChk = el('ld-out'), marginSel = el('ld-margin');
+  function paintLaundry() {
+    laundryBtn.textContent = laundryMode ? '🧺 Ropa: sí' : '🧺 Ropa: no';
+    laundryBtn.classList.toggle('on', laundryMode);
+    el('laundry').hidden = !laundryMode;
+    outChk.checked = laundryOut; marginSel.value = String(laundryMargin);
+    placePanels();
+    updateLaundry();
+  }
+  laundryBtn.onclick = () => { laundryMode = !laundryMode; store.set('laundry', laundryMode); paintLaundry(); };
+  outChk.onchange = async () => {
+    laundryOut = outChk.checked;
+    if (laundryOut && 'Notification' in window && Notification.permission !== 'granted') {
+      const p = await Notification.requestPermission();
+      if (p !== 'granted') el('ld-extra').textContent = 'Sin permiso de notificaciones: solo verás el aviso aquí.';
+    }
+    store.set('laundryOut', laundryOut); lastLaundryAlert = 0; updateLaundry();
+  };
+  marginSel.onchange = () => { laundryMargin = Number(marginSel.value); store.set('laundryMargin', laundryMargin); updateLaundry(); };
+
+  // ---------- Personalizar: mostrar u ocultar partes ----------
+  const PARTS = { clock: 'Reloj', rain: 'Tarjeta de lluvia', forecast: 'Previsión 6 horas', legend: 'Leyenda de colores', timeline: 'Barra de tiempo', locate: 'Botón «Mi ubicación»', ring: 'Círculo de aviso' };
+  const PART_EL = { clock: 'clock', rain: 'status', forecast: 'forecast', legend: 'legend', timeline: 'bottom', locate: 'locate' };
+  let hiddenParts = (Array.isArray(store.get('hidden', [])) ? store.get('hidden', []) : []).filter(k => k in PARTS);
+  function applyParts() {
+    for (const [k, id] of Object.entries(PART_EL)) el(id).hidden = hiddenParts.includes(k);
+    el('top').hidden = hiddenParts.includes('clock') && hiddenParts.includes('rain');
+    if (hiddenParts.includes('ring')) map.removeLayer(ring); else ring.addTo(map);
+    placePanels();
+  }
+  el('custom-list').innerHTML = Object.entries(PARTS).map(([k, label]) =>
+    `<label><input type="checkbox" data-part="${k}"> ${esc(label)}</label>`).join('');
+  el('custom-list').querySelectorAll('input').forEach(cb => {
+    cb.checked = !hiddenParts.includes(cb.dataset.part);
+    cb.onchange = () => {
+      hiddenParts = hiddenParts.filter(k => k !== cb.dataset.part);
+      if (!cb.checked) hiddenParts.push(cb.dataset.part);
+      store.set('hidden', hiddenParts); applyParts();
+    };
+  });
+  const custom = el('custom');
+  el('customize').onclick = () => { custom.hidden = false; };
+  el('custom-close').onclick = () => { custom.hidden = true; };
+  custom.onclick = e => { if (e.target === custom) custom.hidden = true; };
+
+  // Tecla H: ocultar/mostrar todo (solo mapa)
+  function setMinimal(on) { document.body.classList.toggle('minimal', on); el('show-ui').hidden = !on; }
+  el('show-ui').onclick = () => setMinimal(false);
+  document.addEventListener('keydown', e => {
+    if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'h' || e.key === 'H') setMinimal(!document.body.classList.contains('minimal'));
+    if (e.key === 'Escape') { custom.hidden = true; setMinimal(false); }
+  });
+
+  // Columna derecha: previsión arriba y ropa tendida debajo (en móvil, todo bajo el panel del reloj).
+  function placePanels() {
+    const narrow = innerWidth <= 760, topVisible = !el('top').hidden, fcVisible = !fcEl.hidden;
+    const below = e => e.offsetTop + e.offsetHeight + 8;
+    fcEl.style.top = narrow && topVisible ? below(topEl) + 'px' : '';
+    const ld = el('laundry');
+    ld.style.top = (fcVisible ? below(fcEl) : narrow && topVisible ? below(topEl) : 12) + 'px';
+  }
+
   // ---------- Arranque ----------
+  applyParts();
+  paintLaundry();
   loadFrames();
   loadForecast();
   locate(true);

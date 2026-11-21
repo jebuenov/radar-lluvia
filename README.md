@@ -14,6 +14,8 @@ Inspirado en rain-alarm.com. Datos de radar: [RainViewer](https://www.rainviewer
 - 🌤️ Arriba a la derecha, previsión de las próximas 6 horas (Open-Meteo): cielo, temperatura, probabilidad y mm de lluvia.
 - 🕘 Reloj arriba a la izquierda con la hora y la fecha de la zona horaria de tu ubicación.
 - 🌓 Mapa claro/oscuro.
+- 🧺 Modo ropa tendida: te dice si es buen momento para tender, cuánto tardará en secarse y la mejor hora del día. Con «Tengo ropa tendida» te avisa antes de que llegue la lluvia (30 min, 1 h o 2 h de margen, calculado con la velocidad a la que se acerca en el radar).
+- ⚙️ Personalizar: muestra u oculta cada parte de la pantalla (se guarda en el navegador). Tecla **H**: ocultar todo y ver solo el mapa.
 
 ## Instalarla como app en el PC (ventana propia)
 Abre el enlace en **Chrome** o **Edge** → icono de instalar en la barra de direcciones (o menú ⋮ → *Enviar, guardar y compartir* / *Aplicaciones* → *Instalar Radar de lluvia*).
